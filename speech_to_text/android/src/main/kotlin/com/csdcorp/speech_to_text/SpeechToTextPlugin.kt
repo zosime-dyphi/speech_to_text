@@ -394,12 +394,6 @@ public class SpeechToTextPlugin :
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
         when (requestCode) {
             resultRequestCode -> {
-                if(data != null){
-                    Toast.makeText(currentActivity, "data 있다", Toast.LENGTH_SHORT).show();
-                }else{
-                    Toast.makeText(currentActivity, "data 없다", Toast.LENGTH_SHORT).show();
-                }
-
 
                 if (resultCode == RESULT_OK && data != null) {
 

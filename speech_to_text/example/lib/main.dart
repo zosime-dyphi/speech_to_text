@@ -210,7 +210,6 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
     await saveFile.writeAsBytes(bytes);
     print('saveFile ${saveFile.path}');
 
-    
     // Directory? exlDir = await getExternalStorageDirectory();
     // String? exlPath = exlDir?.path;
     // print('exlPath $exlPath');
