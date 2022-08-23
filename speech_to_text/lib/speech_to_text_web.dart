@@ -137,6 +137,8 @@ class SpeechToTextPlugin extends SpeechToTextPlatform {
   @override
   Future<bool> listen(
       {String? localeId,
+        String? prompt,
+        bool? dialogMode,
       partialResults = true,
       onDevice = false,
       int listenMode = 0,
@@ -214,7 +216,7 @@ class SpeechToTextPlugin extends SpeechToTextPlatform {
         }
       }
     }
-    var result = SpeechRecognitionResult(recogResults, isFinal);
+    var result = SpeechRecognitionResult(recogResults, isFinal, null);
     onTextRecognition?.call(jsonEncode(result.toJson()));
     _resultSent = true;
   }

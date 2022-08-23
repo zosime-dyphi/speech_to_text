@@ -1,14 +1,30 @@
 import 'dart:async';
-import 'dart:math';
+import 'dart:convert';
 
+import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
+
+import 'package:downloads_path_provider_28/downloads_path_provider_28.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_downloader/flutter_downloader.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
-void main() => runApp(SpeechSampleApp());
+//void main() => runApp(SpeechSampleApp());
 
-class SpeechSampleApp extends StatefulWidget {
+Future<void> main() async{
+  WidgetsFlutterBinding.ensureInitialized();
+  await FlutterDownloader.initialize(debug: true, ignoreSsl: true);
+  runApp(SpeechSampleApp());
+}
+
+
+class SpeechSampleApp extends StatefulWidget with WidgetsBindingObserver{
   @override
   _SpeechSampleAppState createState() => _SpeechSampleAppState();
 }
@@ -19,10 +35,11 @@ class SpeechSampleApp extends StatefulWidget {
 class _SpeechSampleAppState extends State<SpeechSampleApp> {
   bool _hasSpeech = false;
   bool _logEvents = false;
+  bool _useLegacy = false;
   final TextEditingController _pauseForController =
-      TextEditingController(text: '3');
+      TextEditingController(text: '');
   final TextEditingController _listenForController =
-      TextEditingController(text: '30');
+      TextEditingController(text: '10');
   double level = 0.0;
   double minSoundLevel = 50000;
   double maxSoundLevel = -50000;
@@ -36,7 +53,14 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
   @override
   void initState() {
     super.initState();
+    // FlutterDownloader.registerCallback(downloadCallback);
+    // var permission = await Permission.storage.request();
+    // print('permission ${permission}');    
   }
+
+  // static void downloadCallback(String id, DownloadTaskStatus status, int progress) {
+  //   print('Background Isolate Callback: task ($id) is in status ($status) and process ($progress)');    
+  // }
 
   /// This initializes SpeechToText. That only has to be done
   /// once per application, though calling it again is harmless
@@ -49,6 +73,12 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
         onError: errorListener,
         onStatus: statusListener,
         debugLogging: true,
+        options: [
+          // SpeechToText.androidAlwaysUseStop,
+          // SpeechToText.androidIntentLookup,
+          SpeechToText.androidNoBluetooth,
+          SpeechToText.iosNoBluetooth,
+        ],
       );
       if (hasSpeech) {
         // Get the list of languages installed on the supporting platform so they
@@ -69,6 +99,12 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
         _hasSpeech = false;
       });
     }
+
+
+    Map<Permission, PermissionStatus> statuses = await [
+        Permission.storage, 
+        //add more permission to request here.
+    ].request();
   }
 
   @override
@@ -94,6 +130,8 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
                   _switchLogging,
                   _pauseForController,
                   _listenForController,
+                  _useLegacy,
+                  _switchLegacy,
                 ),
               ],
             ),
@@ -131,8 +169,10 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
         partialResults: true,
         localeId: _currentLocaleId,
         onSoundLevelChange: soundLevelListener,
-        cancelOnError: true,
-        listenMode: ListenMode.confirmation);
+        cancelOnError: false,
+        listenMode: ListenMode.dictation,
+        dialogMode: !_useLegacy,
+    );
     setState(() {});
   }
 
@@ -154,9 +194,30 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
 
   /// This callback is invoked each time new recognition results are
   /// available after `listen` is called.
-  void resultListener(SpeechRecognitionResult result) {
-    _logEvent(
-        'Result listener final: ${result.finalResult}, words: ${result.recognizedWords}');
+  
+  String audioPath = '';
+    void resultListener(SpeechRecognitionResult result) async{
+    print('=====resultListener===============');
+
+    String? audio = result.audio.toString();
+
+    Uint8List bytes = base64.decode(audio);
+
+    var dir = await DownloadsPathProvider.downloadsDirectory;
+    String savename = "rec.amr";    
+    String savePath = dir!.path + "/$savename";
+    File saveFile = File(savePath);
+    await saveFile.writeAsBytes(bytes);
+    print('saveFile ${saveFile.path}');
+
+    
+    // Directory? exlDir = await getExternalStorageDirectory();
+    // String? exlPath = exlDir?.path;
+    // print('exlPath $exlPath');
+    // File saveFile = File('$exlPath/recording.amr');
+    // await saveFile.writeAsBytes(bytes);
+    // print('saveFile ${saveFile.path}');
+
     setState(() {
       lastWords = '${result.recognizedWords} - ${result.finalResult}';
     });
@@ -204,6 +265,12 @@ class _SpeechSampleAppState extends State<SpeechSampleApp> {
   void _switchLogging(bool? val) {
     setState(() {
       _logEvents = val ?? false;
+    });
+  }
+
+  void _switchLegacy(bool? val) {
+    setState(() {
+      _useLegacy = val ?? false;
     });
   }
 }
@@ -362,6 +429,8 @@ class SessionOptionsWidget extends StatelessWidget {
       this.switchLogging,
       this.pauseForController,
       this.listenForController,
+      this.useLegacy,
+      this.switchLegacy,
       {Key? key})
       : super(key: key);
 
@@ -372,6 +441,8 @@ class SessionOptionsWidget extends StatelessWidget {
   final TextEditingController listenForController;
   final List<LocaleName> localeNames;
   final bool logEvents;
+  final bool useLegacy;
+  final void Function(bool?) switchLegacy;
 
   @override
   Widget build(BuildContext context) {
@@ -423,6 +494,15 @@ class SessionOptionsWidget extends StatelessWidget {
               Checkbox(
                 value: logEvents,
                 onChanged: switchLogging,
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Text('Android Legacy: '),
+              Checkbox(
+                value: useLegacy,
+                onChanged: switchLegacy,
               ),
             ],
           ),

@@ -140,6 +140,8 @@ abstract class SpeechToTextPlatform extends PlatformInterface {
   ///
   Future<bool> listen(
       {String? localeId,
+        String? prompt,
+        bool? dialogMode,
       partialResults = true,
       onDevice = false,
       int listenMode = 0,

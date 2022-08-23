@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:json_annotation/json_annotation.dart';
 
 part 'speech_recognition_result.g.dart';
@@ -60,11 +62,14 @@ class SpeechRecognitionResult {
   bool get hasConfidenceRating =>
       alternates.isNotEmpty ? alternates.first.hasConfidenceRating : false;
 
-  SpeechRecognitionResult(this.alternates, this.finalResult);
+  // final String? audioPath;
+  final String? audio;
+
+  SpeechRecognitionResult(this.alternates, this.finalResult, this.audio);
 
   @override
   String toString() {
-    return 'SpeechRecognitionResult words: $alternates, final: $finalResult';
+    return 'SpeechRecognitionResult words: $alternates, final: $finalResult, audio: ${audio}';
   }
 
   @override
@@ -83,7 +88,7 @@ class SpeechRecognitionResult {
   Map<String, dynamic> toJson() => _$SpeechRecognitionResultToJson(this);
 
   SpeechRecognitionResult toFinal() {
-    return SpeechRecognitionResult(alternates, true);
+    return SpeechRecognitionResult(alternates, true, audio);
   }
 }
 

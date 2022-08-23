@@ -52,6 +52,7 @@ struct SpeechRecognitionWords : Codable {
 struct SpeechRecognitionResult : Codable {
     let alternates: [SpeechRecognitionWords]
     let finalResult: Bool
+    let audioPath: String?
 }
 
 struct SpeechRecognitionError : Codable {
@@ -65,7 +66,7 @@ enum SpeechToTextError: Error {
 
 
 @available(iOS 10.0, *)
-public class SwiftSpeechToTextPlugin: NSObject, FlutterPlugin {
+public class SwiftSpeechToTextPlugin: NSObject, FlutterPlugin, AVAudioRecorderDelegate {
     private var channel: FlutterMethodChannel
     private var registrar: FlutterPluginRegistrar
     private var recognizer: SFSpeechRecognizer?
@@ -90,6 +91,9 @@ public class SwiftSpeechToTextPlugin: NSObject, FlutterPlugin {
     private let speechBufferSize: AVAudioFrameCount = 1024
     private static var subsystem = Bundle.main.bundleIdentifier!
     private let pluginLog = OSLog(subsystem: "com.csdcorp.speechToText", category: "plugin")
+    
+    
+    var newAudio: AVAudioFile?
     
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "plugin.csdcorp.com/speech_to_text", binaryMessenger: registrar.messenger())
@@ -195,9 +199,9 @@ public class SwiftSpeechToTextPlugin: NSObject, FlutterPlugin {
     }
     
     fileprivate func setupListeningSound() {
-        listeningSound = loadSound("assets/sounds/speech_to_text_listening.m4r")
-        successSound = loadSound("assets/sounds/speech_to_text_stop.m4r")
-        cancelSound = loadSound("assets/sounds/speech_to_text_cancel.m4r")
+        listeningSound = loadSound("packages/speech_to_text/assets/sounds/speech_to_text_listening.m4r")
+        successSound = loadSound("packages/speech_to_text/assets/sounds/speech_to_text_stop.m4r")
+        cancelSound = loadSound("packages/speech_to_text/assets/sounds/speech_to_text_cancel.m4r")
     }
     
     fileprivate func loadSound( _ assetPath: String ) -> AVAudioPlayer? {
@@ -228,6 +232,7 @@ public class SwiftSpeechToTextPlugin: NSObject, FlutterPlugin {
             onDeviceStatus = localRecognizer.supportsOnDeviceRecognition
         }
         recognizer?.delegate = self
+        
         inputNode = audioEngine.inputNode
         guard inputNode != nil else {
             os_log("Error no input node", log: pluginLog, type: .error)
@@ -263,17 +268,16 @@ public class SwiftSpeechToTextPlugin: NSObject, FlutterPlugin {
         stopAllPlayers()
         self.currentTask?.finish()
         if let sound = successSound {
-            onPlayEnd = {() -> Void in
-                self.stopCurrentListen( )
-                self.sendBoolResult( true, result )
-                return
-            }
+//            onPlayEnd = {() -> Void in
+//                self.stopCurrentListen( )
+//                self.sendBoolResult( true, result )
+//                return
+//            }
             sound.play()
         }
-        else {
-            stopCurrentListen( )
-            sendBoolResult( true, result );
-        }
+        stopCurrentListen( )
+        sendBoolResult( true, result );
+//        newAudio = nil
     }
     
     private func cancelSpeech( _ result: @escaping FlutterResult) {
@@ -342,7 +346,10 @@ public class SwiftSpeechToTextPlugin: NSObject, FlutterPlugin {
         currentTask = nil
         onPlayEnd = nil
         listening = false
+        
+//        self.newAudio = nil
     }
+    
     
     private func listenForSpeech( _ result: @escaping FlutterResult, localeStr: String?, partialResults: Bool, onDevice: Bool, listenMode: ListenMode, sampleRate: Int ) {
         if ( nil != currentTask || listening ) {
@@ -350,6 +357,8 @@ public class SwiftSpeechToTextPlugin: NSObject, FlutterPlugin {
             return
         }
         do {
+
+            
         //    let inErrorTest = true
             failedListen = false
             returnPartialResults = partialResults
@@ -376,16 +385,6 @@ public class SwiftSpeechToTextPlugin: NSObject, FlutterPlugin {
             }
             try self.audioSession.setMode(AVAudioSession.Mode.default)
             try self.audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-            if let sound = listeningSound {
-                self.onPlayEnd = {()->Void in
-                    if ( !self.failedListen ) {
-                        self.listening = true
-                        self.invokeFlutter( SwiftSpeechToTextCallbackMethods.notifyStatus, arguments: SpeechToTextStatus.listening.rawValue )
-
-                    }
-                }
-                sound.play()
-            }
             self.audioEngine.reset();
             if(inputNode?.inputFormat(forBus: 0).channelCount == 0){
                 throw SpeechToTextError.runtimeError("Not enough available inputs.")
@@ -417,20 +416,45 @@ public class SwiftSpeechToTextPlugin: NSObject, FlutterPlugin {
             let recordingFormat = inputNode?.outputFormat(forBus: self.busForNodeTap)
             let theSampleRate = audioSession.sampleRate
             let fmt = AVAudioFormat(commonFormat: recordingFormat!.commonFormat, sampleRate: theSampleRate, channels: recordingFormat!.channelCount, interleaved: recordingFormat!.isInterleaved)
+            
+
+            let documentURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            
+              // AVAudioFile uses the Core Audio Format (CAF) to write to disk.
+              // So we're using the caf file extension.
+            self.newAudio = try! AVAudioFile(forWriting: documentURL.appendingPathComponent("recording.caf"), settings: fmt!.settings)
+            
             try trap {
                 self.inputNode?.installTap(onBus: self.busForNodeTap, bufferSize: self.speechBufferSize, format: fmt) { (buffer: AVAudioPCMBuffer, when: AVAudioTime) in
                     currentRequest.append(buffer)
                     self.updateSoundLevel( buffer: buffer )
+                    
+                    try! self.newAudio?.write(from: buffer)
+                
                 }
             }
+
         //    if ( inErrorTest ){
         //        throw SpeechToTextError.runtimeError("for testing only")
         //    }
             self.audioEngine.prepare()
-            try self.audioEngine.start()
-            if nil == listeningSound {
-                listening = true
-                self.invokeFlutter( SwiftSpeechToTextCallbackMethods.notifyStatus, arguments: SpeechToTextStatus.listening.rawValue )
+            
+            if let sound = listeningSound {
+                self.onPlayEnd = {()->Void in
+                    if ( !self.failedListen ) {
+                        self.listening = true
+                        self.invokeFlutter( SwiftSpeechToTextCallbackMethods.notifyStatus, arguments: SpeechToTextStatus.listening.rawValue )
+                        
+                        try! self.audioEngine.start()
+                    }
+                }
+                sound.play()
+            } else {
+                
+                    listening = true
+                    self.invokeFlutter( SwiftSpeechToTextCallbackMethods.notifyStatus, arguments: SpeechToTextStatus.listening.rawValue )
+                    
+                    try self.audioEngine.start()
             }
             sendBoolResult( true, result );
         }
@@ -511,11 +535,19 @@ public class SwiftSpeechToTextPlugin: NSObject, FlutterPlugin {
             let words: SpeechRecognitionWords = SpeechRecognitionWords(recognizedWords: transcription.formattedString, confidence: confidenceIn( transcription))
             speechWords.append( words )
         }
-        let speechInfo = SpeechRecognitionResult(alternates: speechWords, finalResult: isFinal )
+        
+        var speechInfo: SpeechRecognitionResult?
+        
+        if(!isFinal){
+            speechInfo = SpeechRecognitionResult(alternates: speechWords, finalResult: isFinal, audioPath: nil);
+        } else {
+            speechInfo = SpeechRecognitionResult(alternates: speechWords, finalResult: isFinal, audioPath: self.newAudio?.url.relativePath)
+            self.newAudio = nil
+        }
         do {
             let speechMsg = try jsonEncoder.encode(speechInfo)
             if let speechStr = String( data:speechMsg, encoding: .utf8) {
-                os_log("Encoded JSON result: %{PUBLIC}@", log: pluginLog, type: .debug, speechStr )
+                os_log("Encoded JSON 111 result: %{PUBLIC}@", log: pluginLog, type: .debug, speechStr )
                 invokeFlutter( SwiftSpeechToTextCallbackMethods.textRecognition, arguments: speechStr )
             }
         } catch {
@@ -619,6 +651,7 @@ extension SwiftSpeechToTextPlugin : SFSpeechRecognitionTaskDelegate {
             os_log("%{PUBLIC}@ with error: %{PUBLIC}@", log: pluginLog, type: .debug, source, error.debugDescription)
         }
     }
+
 }
 
 @available(iOS 10.0, *)

@@ -99,6 +99,8 @@ class MethodChannelSpeechToText extends SpeechToTextPlatform {
   @override
   Future<bool> listen(
       {String? localeId,
+        String? prompt,
+        bool? dialogMode,
       partialResults = true,
       onDevice = false,
       int listenMode = 0,
@@ -108,6 +110,8 @@ class MethodChannelSpeechToText extends SpeechToTextPlatform {
       "onDevice": onDevice,
       "listenMode": listenMode,
       "sampleRate": sampleRate,
+      "prompt": prompt,
+      "dialogMode": dialogMode,
     };
     if (null != localeId) {
       listenParams["localeId"] = localeId;

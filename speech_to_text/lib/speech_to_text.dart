@@ -398,12 +398,15 @@ class SpeechToText {
       Duration? listenFor,
       Duration? pauseFor,
       String? localeId,
+        String? prompt,
+        bool? dialogMode = false,
       SpeechSoundLevelChange? onSoundLevelChange,
       cancelOnError = false,
       partialResults = true,
       onDevice = false,
       ListenMode listenMode = ListenMode.confirmation,
-      sampleRate = 0}) async {
+      sampleRate = 0,
+      }) async {
     if (!_initWorked) {
       throw SpeechToTextNotInitializedException();
     }
@@ -425,7 +428,10 @@ class SpeechToText {
           onDevice: onDevice,
           listenMode: listenMode.index,
           sampleRate: sampleRate,
-          localeId: localeId);
+          localeId: localeId,
+          prompt: prompt,
+          dialogMode: dialogMode,
+      );
       if (started) {
         _listenStartedAt = clock.now().millisecondsSinceEpoch;
         _lastSpeechEventAt = _listenStartedAt;
@@ -538,6 +544,7 @@ class SpeechToText {
     // print('onTextRecognition');
     Map<String, dynamic> resultMap = jsonDecode(resultJson);
     var speechResult = SpeechRecognitionResult.fromJson(resultMap);
+    print('_onTextRecognition ${resultJson}');
     _notifyResults(speechResult);
   }
 

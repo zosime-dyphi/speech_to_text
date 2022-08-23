@@ -13,6 +13,7 @@ SpeechRecognitionResult _$SpeechRecognitionResultFromJson(
         .map((e) => SpeechRecognitionWords.fromJson(e as Map<String, dynamic>))
         .toList(),
     json['finalResult'] as bool,
+    json['audio'] as String,
   );
 }
 
@@ -21,6 +22,7 @@ Map<String, dynamic> _$SpeechRecognitionResultToJson(
     <String, dynamic>{
       'alternates': instance.alternates.map((e) => e.toJson()).toList(),
       'finalResult': instance.finalResult,
+      'audio': instance.audio,
     };
 
 SpeechRecognitionWords _$SpeechRecognitionWordsFromJson(
